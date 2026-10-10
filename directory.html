@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Your document directory</title>
+<!--
+    directory.html — the on-screen CATEGORY DIRECTORY (D50 layer 2, 20 Aug 2026).
+
+    Loaded in the portal's form-viewer iframe by the display_category_directory
+    client tool. Reads its own content:
+
+      POST {API_BASE}/document_analyser/get_directory_data  (JSON: directory_token)
+
+    ⚠ THE AGENT NEVER SUPPLIES THE CONTENT. It carries an opaque 11-char session id;
+    the portal resolves that to this URL and this page fetches its own tree. An LLM
+    asked to relay a long signed URL provably mangled it (B15, 27 Jul), and one asked
+    to relay 563 form titles would invent some. The page is the source of truth on
+    screen; the agent only opens it.
+
+    This page is READ-ONLY. It writes nothing and offers no actions, so there is no
+    failure mode where a mis-click changes a compliance record.
+-->
+<style>
+  :root {
+    --bg: #ffffff; --fg: #1a1a1a; --muted: #5c6670; --line: #e3e7ea;
+    --accent: #0b6b62; --chip: #f2f6f5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#14181b; --fg:#e8eaec; --muted:#9aa4ad; --line:#2a3136;
+            --accent:#4fd1c5; --chip:#1c2226; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:18px 16px 40px; background:var(--bg); color:var(--fg);
+         font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }
+  h1 { font-size:19px; margin:0 0 2px; }
+  .sub { color:var(--muted); font-size:13px; margin-bottom:16px; }
+  .cat { border:1px solid var(--line); border-radius:10px; margin-bottom:10px; overflow:hidden; }
+  .cat > summary { cursor:pointer; padding:11px 14px; display:flex; align-items:center;
+                   gap:10px; font-weight:600; list-style:none; }
+  .cat > summary::-webkit-details-marker { display:none; }
+  .cat > summary::before { content:"▸"; color:var(--accent); font-size:13px; }
+  .cat[open] > summary::before { content:"▾"; }
+  .count { margin-left:auto; background:var(--chip); color:var(--muted);
+           border-radius:999px; padding:2px 10px; font-size:12px; font-weight:600; }
+  ul { margin:0; padding:0 14px 12px 34px; }
+  li { padding:4px 0; border-top:1px solid var(--line); }
+  li:first-child { border-top:none; }
+  .cad { color:var(--muted); font-size:12px; }
+  /* v2.2.297 — the traffic light. Each chip carries a WORD as well as a colour: roughly
+     8% of men cannot separate red from green, and a compliance status you cannot read is
+     worse than no status. Colour is the fast signal, the word is the actual information. */
+  .chip { display:inline-block; margin-left:8px; padding:1px 8px; border-radius:999px;
+          font-size:11px; font-weight:600; white-space:nowrap; border:1px solid transparent; }
+  .chip.red   { background:#fdecea; color:#8c1d13; border-color:#f2b8b2; }
+  .chip.pink  { background:#fdeaf4; color:#8c1358; border-color:#f2b2d4; }
+  /* ⚠ YELLOW vs AMBER is the weakest distinction in this palette, so they are pulled
+     apart deliberately: yellow is pale and lemon (never submitted — status unknown),
+     amber is deeper and orange (due within a month — a real date). Both carry their own
+     word, which is what a reader actually relies on. */
+  .chip.yellow{ background:#fdfae0; color:#6b5c00; border-color:#e8dc94; }
+  .chip.amber { background:#fdefdb; color:#8a4b00; border-color:#f0c890; }
+  .chip.green { background:#e9f7ef; color:#14653b; border-color:#aedcc3; }
+  /* ⚠ Grey must never read as "fine". It is flat, unsaturated and visually QUIETER than
+     green — it means "we cannot say", and it is the COMMON case today (250 of 373). */
+  .chip.grey  { background:#f0f2f4; color:#5c6670; border-color:#dfe3e7; }
+  @media (prefers-color-scheme: dark) {
+    .chip.red   { background:#3a1a17; color:#f7b4ac; border-color:#7d2f26; }
+    .chip.pink  { background:#3a1730; color:#f5b0d6; border-color:#7d2a60; }
+    .chip.yellow{ background:#302e10; color:#e5dc8d; border-color:#5f5a1f; }
+    .chip.amber { background:#33240f; color:#f0b775; border-color:#70491d; }
+    .chip.green { background:#12301f; color:#8fdcb0; border-color:#2c6642; }
+    .chip.grey  { background:#22282c; color:#9aa4ad; border-color:#39424a; }
+  }
+  .tally { display:flex; gap:6px; flex-wrap:wrap; margin:0 0 14px; }
+  .started { color:var(--muted); font-size:11px; margin-left:6px; }
+  /* 3 Oct 2026 — a row is clickable inside the portal (Benedict opens the form) */
+  li.pick { cursor:pointer; border-radius:4px; }
+  li.pick:hover, li.pick:focus-visible { background:var(--chip); outline:none; }
+  .sent { color:var(--accent); font-size:11px; margin-left:8px; font-weight:600; }
+  .msg { padding:14px; border:1px solid var(--line); border-radius:10px; color:var(--muted); }
+  /* 5 Oct 2026 (Steven: "we need to allow the user to be able to filter and search the forms directory") —
+     a search box and clickable status chips. Client side only: the page still shows exactly what the server
+     sent, it only hides rows; it writes nothing. */
+  .find { display:flex; gap:8px; margin:0 0 12px; }
+  .find input { flex:1; min-width:0; padding:9px 12px; border:1px solid var(--line); border-radius:8px;
+                background:var(--bg); color:var(--fg); font:inherit; }
+  .find input:focus { outline:2px solid var(--accent); outline-offset:1px; }
+  .find button { padding:8px 14px; border:1px solid var(--line); border-radius:8px; background:var(--chip);
+                 color:var(--fg); font:inherit; cursor:pointer; }
+  .tally .chip.filter { cursor:pointer; }
+  .tally .chip.filter:hover, .tally .chip.filter:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
+  .tally .chip.on { outline:2px solid var(--fg); outline-offset:1px; }
+  .shown { color:var(--muted); font-size:13px; margin:0 0 12px; }
+  .gone { display:none; }
+  .err { border-color:#d9534f; color:#d9534f; }
+</style>
+</head>
+<body>
+<h1>Your document directory</h1>
+<div class="sub" id="sub">Loading…</div>
+<div class="find gone" id="find">
+  <input id="q" type="search" autocomplete="off" spellcheck="false"
+         placeholder="Search your forms — type part of a name, e.g. fire"
+         aria-label="Search your forms by name">
+  <button id="clear" type="button" class="gone">Show all</button>
+</div>
+<div class="tally" id="tally"></div>
+<div class="shown gone" id="shown" aria-live="polite"></div>
+<div id="tree"></div>
+
+<script>
+(function () {
+  "use strict";
+  var API_BASE = "https://mcp2.bh.tkllabs.io:9779";
+  var DATA_URL = API_BASE + "/document_analyser/get_directory_data";
+
+  function el(tag, cls, text) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text !== undefined && text !== null) n.textContent = String(text);
+    return n;
+  }
+  function fail(msg) {
+    document.getElementById("sub").textContent = "";
+    var box = el("div", "msg err", msg);
+    var t = document.getElementById("tree");
+    t.textContent = "";
+    t.appendChild(box);
+  }
+
+  var token = new URLSearchParams(window.location.search).get("token");
+  if (!token) {
+    fail("This directory link is incomplete. Please ask Benedict to show the directory again.");
+    return;
+  }
+
+  fetch(DATA_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ directory_token: token })
+  }).then(function (r) {
+    // A dead or expired token is the ordinary case here (short TTL by design), so
+    // say something a dentist can act on rather than surfacing a status code.
+    if (r.status === 401 || r.status === 403) {
+      throw new Error("expired");
+    }
+    if (!r.ok) { throw new Error("http " + r.status); }
+    return r.json();
+  }).then(function (data) {
+    var cats = (data && data.categories) || [];
+    if (!cats.length) {
+      document.getElementById("sub").textContent = "";
+      document.getElementById("tree").appendChild(
+        el("div", "msg", "There are no documents in your catalogue yet."));
+      return;
+    }
+    document.getElementById("sub").textContent =
+      data.form_count + " forms across " + data.category_count + " categories";
+
+    // ⚠ `bands` ABSENT means the status join failed — show nothing rather than a row of
+    // zeros, because "no colours available" and "everything is green" must never look alike.
+    if (data && data.bands) {
+      var order = [["red", "overdue"], ["yellow", "never submitted"],
+                   ["pink", "due within a week"],
+                   ["amber", "due within a month"], ["green", "due later"],
+                   ["grey", "no schedule set"]];
+      var tally = document.getElementById("tally");
+      order.forEach(function (pair) {
+        var n = data.bands[pair[0]] || 0;
+        if (!n) { return; }                       // an empty band is noise, not information
+        var chip = el("span", "chip filter " + pair[0], n + " " + pair[1]);
+        // 5 Oct 2026 — a status chip is a filter: click it to see only those forms, again to see all
+        chip.setAttribute("role", "button");
+        chip.setAttribute("tabindex", "0");
+        chip.setAttribute("aria-pressed", "false");
+        chip.setAttribute("data-band", pair[0]);
+        chip.title = "Show only the forms that are " + pair[1] + " (click again to show all)";
+        tally.appendChild(chip);
+      });
+    }
+
+    // 3 Oct 2026 (Steven) — inside the portal a row is a button: the title goes to the portal,
+    // which hands it to Benedict ("Let's fill in …") if a conversation is live. Opened on its
+    // own (no portal around it) the rows stay plain text.
+    var inPortal = false;
+    try { inPortal = window.parent && window.parent !== window; } catch (e) { inPortal = false; }
+    var pending = null;
+    function note(li, text) {
+      var old = li.querySelector(".sent");
+      if (old) { li.removeChild(old); }
+      var n = el("span", "sent", text);
+      li.appendChild(n);
+      setTimeout(function () { if (n.parentNode) { n.parentNode.removeChild(n); } }, 2600);
+    }
+    if (inPortal) {
+      window.addEventListener("message", function (e) {
+        if (e.source !== window.parent) { return; }
+        var d = e.data || {};
+        if (d.type !== "teckel-fill-form-result" || !pending) { return; }
+        note(pending, d.ok ? "sent to Benedict" : "start a conversation with Benedict first");
+        pending = null;
+      });
+      var hint = el("div", "msg", "Click a form and Benedict will open it for you.");
+      document.getElementById("tree").appendChild(hint);
+    }
+
+    var frag = document.createDocumentFragment();
+    var rows = [];                              // 5 Oct 2026 — one entry per form row, for the search and filters
+    var groups = [];                            // one entry per category
+    cats.forEach(function (c, i) {
+      var d = el("details", "cat");
+      if (i === 0) { d.open = true; }           // open the largest so the page is never blank
+      var s = el("summary");
+      s.appendChild(el("span", null, c.label || c.category));
+      var countEl = el("span", "count", c.count);
+      s.appendChild(countEl);
+      d.appendChild(s);
+      var ul = el("ul");
+      var group = { box: d, count: countEl, total: (c.forms || []).length, shownAtStart: c.count,
+                    label: String(c.label || c.category || "").toLowerCase(), openAtStart: i === 0, rows: [] };
+      groups.push(group);
+      (c.forms || []).forEach(function (f) {
+        var li = el("li");
+        var row = { li: li, text: String(f.title || f.form_id || "").toLowerCase(), band: f.band || "", group: group };
+        rows.push(row);
+        group.rows.push(row);
+        li.appendChild(el("span", null, f.title || f.form_id));
+        // The SERVER decides the band and the words; this page paints them and computes
+        // nothing about compliance. Same rule as the rest of the directory.
+        if (f.band && f.band_label) {
+          li.appendChild(el("span", "chip " + f.band, f.band_label));
+        }
+        if (f.started) { li.appendChild(el("span", "started", "started")); }
+        if (f.cadence) { li.appendChild(el("span", "cad", "  ·  " + f.cadence)); }
+        if (inPortal) {
+          li.className = "pick";
+          li.setAttribute("role", "button");
+          li.setAttribute("tabindex", "0");
+          li.title = "Click and Benedict opens this form";
+          var send = function () {
+            pending = li;
+            window.parent.postMessage({ type: "teckel-fill-form", name: f.title || f.form_id || "" }, "*");
+          };
+          li.addEventListener("click", send);
+          li.addEventListener("keydown", function (e) {
+            if (e.key === "Enter" || e.key === " ") { e.preventDefault(); send(); }
+          });
+        }
+        ul.appendChild(li);
+      });
+      d.appendChild(ul);
+      frag.appendChild(d);
+    });
+    document.getElementById("tree").appendChild(frag);
+
+    // ── 5 Oct 2026 — SEARCH AND FILTER. Hides rows only; shows exactly what the server sent. ──
+    var find = document.getElementById("find"), q = document.getElementById("q");
+    var clear = document.getElementById("clear"), shown = document.getElementById("shown");
+    var chips = Array.prototype.slice.call(document.querySelectorAll("#tally .chip.filter"));
+    var band = "";
+    find.classList.remove("gone");
+    function apply() {
+      var terms = q.value.toLowerCase().split(/\s+/).filter(function (t) { return t; });
+      var active = terms.length > 0 || band !== "";
+      var seen = 0;
+      groups.forEach(function (g) {
+        var n = 0;
+        g.rows.forEach(function (r) {
+          // every word typed must be in the form's name or in its category's name
+          var ok = terms.every(function (t) { return r.text.indexOf(t) !== -1 || g.label.indexOf(t) !== -1; })
+                   && (band === "" || r.band === band);
+          r.li.classList.toggle("gone", !ok);
+          if (ok) { n += 1; }
+        });
+        seen += n;
+        g.box.classList.toggle("gone", active && n === 0);
+        g.count.textContent = active ? (n + " of " + g.total) : String(g.shownAtStart);
+        if (active) { g.box.open = n > 0; } else { g.box.open = g.openAtStart; }
+      });
+      clear.classList.toggle("gone", !active);
+      shown.classList.toggle("gone", !active);
+      if (active) {
+        shown.textContent = seen === 0
+          ? "No form matches. Try fewer letters, or press Show all."
+          : (seen + " of " + rows.length + " forms shown" + (inPortal ? " — click one and Benedict opens it." : "."));
+      }
+      chips.forEach(function (c) {
+        var on = c.getAttribute("data-band") === band;
+        c.classList.toggle("on", on);
+        c.setAttribute("aria-pressed", on ? "true" : "false");
+      });
+    }
+    q.addEventListener("input", apply);
+    q.addEventListener("keydown", function (e) { if (e.key === "Escape") { q.value = ""; apply(); } });
+    clear.addEventListener("click", function () { q.value = ""; band = ""; apply(); q.focus(); });
+    chips.forEach(function (c) {
+      var pick = function () { band = (band === c.getAttribute("data-band")) ? "" : c.getAttribute("data-band"); apply(); };
+      c.addEventListener("click", pick);
+      c.addEventListener("keydown", function (e) {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(); }
+      });
+    });
+    // the link may carry a starting filter (?q=fire, ?band=red) — used when Benedict is asked for "the fire forms"
+    var params = new URLSearchParams(window.location.search);
+    var q0 = (params.get("q") || "").slice(0, 80), b0 = params.get("band") || "";
+    if (q0) { q.value = q0; }
+    if (chips.some(function (c) { return c.getAttribute("data-band") === b0; })) { band = b0; }
+    if (q0 || band) { apply(); }
+  }).catch(function (e) {
+    if (String(e && e.message) === "expired") {
+      fail("This directory link has expired. Ask Benedict to show the directory again "
+           + "and it will open with a fresh link.");
+    } else {
+      fail("I couldn't load your directory just now. Ask Benedict to show it again.");
+    }
+  });
+})();
+</script>
+</body>
+</html>
